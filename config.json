@@ -1,0 +1,36 @@
+{
+  "stream": {
+    "url": "wss://api.pasifi.app/v1/stream/ws",
+    "api_key": "YOUR_TICKENGINE_API_KEY",
+    "account_id": "YOUR_TICKENGINE_ACCOUNT_ID"
+  },
+  "agents": {
+    "mt5_ea": {
+      "type": "mt5_ea",
+      "zmq_bind": "tcp://*:5555",
+      "symbol_map": {
+        "EURUSD": "EURUSD",
+        "GBPUSD": "GBPUSD"
+      }
+    },
+    "binance_spot": {
+      "type": "binance_spot",
+      "api_key": "YOUR_BINANCE_API_KEY",
+      "api_secret": "YOUR_BINANCE_API_SECRET",
+      "api_url": "https://api.binance.com",
+      "symbol_map": {
+        "BTCUSD": "BTCUSDT"
+      }
+    },
+    "okx_spot": {
+      "type": "okx_spot",
+      "api_key": "YOUR_OKX_API_KEY",
+      "api_secret": "YOUR_OKX_API_SECRET",
+      "passphrase": "YOUR_OKX_PASSPHRASE",
+      "api_url": "https://www.okx.com",
+      "symbol_map": {
+        "ETHUSD": "ETH-USDT"
+      }
+    }
+  }
+}
