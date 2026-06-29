@@ -106,10 +106,10 @@ async fn main() -> Result<()> {
     for (name, agent_cfg) in config.agents {
         match agent_cfg {
             AgentConfig::Mt5 {
-                zmq_bind,
+                tcp_bind,
                 symbol_map,
             } => {
-                let agent = Mt5Agent::new(&name, &zmq_bind, symbol_map).await?;
+                let agent = Mt5Agent::new(&name, &tcp_bind, symbol_map).await?;
                 agents.push(Box::new(agent));
             }
             AgentConfig::Binance {

@@ -1,28 +1,105 @@
 use crate::agents::{ExecutionAgent, MappedOrder};
 use std::collections::HashMap;
 use tickengine_sdk::{ClientEvent, OrderSide, OrderType};
-use tracing::info;
-use zeromq::{PubSocket, Socket, SocketSend, ZmqMessage};
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::sync::broadcast;
+use tracing::{error, info, warn};
+
+/// Number of signals that can be queued per connected client before drops occur.
+const CHANNEL_CAPACITY: usize = 256;
 
 pub struct Mt5Agent {
     name: String,
-    pub_socket: PubSocket,
+    tx: broadcast::Sender<Vec<u8>>,
     symbol_map: HashMap<String, String>,
 }
 
 impl Mt5Agent {
     pub async fn new(
         name: &str,
-        zmq_bind: &str,
+        tcp_bind: &str,
         symbol_map: HashMap<String, String>,
     ) -> anyhow::Result<Self> {
-        let mut pub_socket = PubSocket::new();
-        pub_socket.bind(zmq_bind).await?;
+        // Strip "tcp://*:" or "tcp://0.0.0.0:" prefix → keep just "0.0.0.0:PORT"
+        let addr = parse_tcp_addr(tcp_bind)?;
+
+        let listener = TcpListener::bind(&addr).await?;
+        let (tx, _) = broadcast::channel::<Vec<u8>>(CHANNEL_CAPACITY);
+        let tx_clone = tx.clone();
+        let agent_name = name.to_string();
+
+        info!(
+            "MT5 TCP server for agent '{}' listening on {}",
+            agent_name, addr
+        );
+
+        // Accept loop — runs forever in background
+        tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, peer)) => {
+                        info!(
+                            "MT5 agent '{}': new EA connection from {}",
+                            agent_name, peer
+                        );
+                        let mut rx = tx_clone.subscribe();
+                        tokio::spawn(async move {
+                            let (_, mut writer) =
+                                tokio::io::split(stream);
+                            loop {
+                                match rx.recv().await {
+                                    Ok(payload) => {
+                                        if let Err(e) =
+                                            writer.write_all(&payload).await
+                                        {
+                                            warn!("MT5 TCP write error (peer {}): {}. Dropping connection.", peer, e);
+                                            break;
+                                        }
+                                    }
+                                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                                        warn!(
+                                            "MT5 TCP client {} lagged by {} messages",
+                                            peer, n
+                                        );
+                                    }
+                                    Err(broadcast::error::RecvError::Closed) => {
+                                        break;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        error!("MT5 TCP accept error: {}", e);
+                    }
+                }
+            }
+        });
+
         Ok(Self {
             name: name.to_string(),
-            pub_socket,
+            tx,
             symbol_map,
         })
+    }
+}
+
+/// Parses ZMQ-style address strings into a standard TCP bind address.
+/// Examples:
+///   "tcp://*:5555"        → "0.0.0.0:5555"
+///   "tcp://0.0.0.0:5555"  → "0.0.0.0:5555"
+///   "tcp://localhost:5555" → "localhost:5555"
+///   "0.0.0.0:5555"        → "0.0.0.0:5555"  (pass-through)
+fn parse_tcp_addr(raw: &str) -> anyhow::Result<String> {
+    let stripped = raw
+        .strip_prefix("tcp://")
+        .unwrap_or(raw)
+        .replace("*:", "0.0.0.0:");
+    if stripped.contains(':') {
+        Ok(stripped)
+    } else {
+        anyhow::bail!("Invalid tcp_bind address '{}': must include a port", raw)
     }
 }
 
@@ -137,22 +214,17 @@ impl ExecutionAgent for Mt5Agent {
         );
         let payload = mql_signal_to_bytes(&signal);
 
-        let topic = match event {
-            ClientEvent::Trade(_) => format!("trade.{}", resolved_symbol),
-            ClientEvent::Order(_) => format!("order.{}", resolved_symbol),
-            ClientEvent::Alert(_) => format!("alert.{}", resolved_symbol),
-            ClientEvent::Metric(_) => format!("metric.{}", resolved_symbol),
-        };
-
         info!(
-            "Publishing to MT5 Agent '{}': {} ({} bytes)",
+            "Broadcasting to MT5 agent '{}' → {} ({} bytes, {} connected clients)",
             self.name,
-            topic,
-            payload.len()
+            resolved_symbol,
+            payload.len(),
+            self.tx.receiver_count()
         );
-        let mut msg = ZmqMessage::from(topic);
-        msg.push_back(payload.into());
-        self.pub_socket.send(msg).await?;
+
+        // send() only errors when there are zero receivers — that's fine, signals will
+        // be delivered once an EA connects. We ignore the error intentionally.
+        let _ = self.tx.send(payload);
         Ok(())
     }
 }

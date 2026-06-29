@@ -7,7 +7,7 @@
   "agents": {
     "mt5_ea": {
       "type": "mt5_ea",
-      "zmq_bind": "tcp://*:5555",
+      "tcp_bind": "tcp://*:5555",
       "symbol_map": {
         "EURUSD": "EURUSD",
         "GBPUSD": "GBPUSD"

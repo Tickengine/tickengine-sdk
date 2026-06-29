@@ -23,7 +23,7 @@ pub struct StreamConfig {
 pub enum AgentConfig {
     #[serde(rename = "mt5_ea")]
     Mt5 {
-        zmq_bind: String,
+        tcp_bind: String,
         symbol_map: HashMap<String, String>,
     },
     #[serde(rename = "binance_spot")]
