@@ -28,17 +28,16 @@ function extractOrderDetails(event: any): OrderDetails | null {
     const data = event.data || {};
 
     if (etype === "trade") {
-        // TradeExecutedEventDto keys: tradeId, type_ → "type" (serde strips _), side, size, price, timestamp
+        // TradeExecutedEventDto: type_ → wire key "type", value "Market"/"Limit"/"Stop"
         const sideIsBuy = data.side === 0 || data.side === "Buy" || data.side === "buy";
-        // `type_` field → serde camelCase strips trailing underscore → key "type"
-        const otRaw = orderTypeRaw(data.type ?? data.type_);
+        const otRaw = orderTypeRaw(data.type);
         return {
             symbol: data.symbol,
             side: sideIsBuy ? "BUY" : "SELL",
             orderType: orderTypeLabel(otRaw),
             quantity: Number(data.size || 0),
             price: Number(data.price || 0),
-            signalId: data.tradeId ?? data.trade_id,    // camelCase key
+            signalId: data.tradeId,
             timestamp: Number(data.timestamp || 0),
             eventType: 0,
             orderTypeRaw: otRaw,

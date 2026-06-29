@@ -16,18 +16,16 @@ def extract_order_details(event: dict) -> dict:
     etype = event.get("type")
     data = event.get("data", {})
     if etype == "trade":
-        # Stream serializes TradeExecutedEventDto with rename_all=camelCase
-        ot_raw = _order_type_raw(data.get("type_"))  # field name is `type_` → serde strips underscore → "type" key... but may vary
-        # try both key forms defensively
-        ot_val = data.get("type_") or data.get("type")
-        ot_raw = _order_type_raw(ot_val)
+    if etype == "trade":
+        # TradeExecutedEventDto: type_ → wire key "type" (serde strips underscore), value "Market"/"Limit"/"Stop"
+        ot_raw = _order_type_raw(data.get("type"))
         return {
             "symbol": data.get("symbol"),
             "side": "BUY" if data.get("side") in [0, "Buy", "buy"] else "SELL",
             "order_type": "LIMIT" if ot_raw == 1 else ("STOP" if ot_raw == 2 else "MARKET"),
             "quantity": float(data.get("size", 0)),
             "price": float(data.get("price", 0)),
-            "signal_id": data.get("tradeId"),        # camelCase from stream
+            "signal_id": data.get("tradeId"),
             "timestamp": int(data.get("timestamp", 0)),
             "event_type": 0,
             "order_type_raw": ot_raw,
