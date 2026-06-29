@@ -68,20 +68,18 @@ async def main():
     print(f"Loading config from: {config_file}")
     with open(config_file, "r") as f:
         config = json.load(f)
-        
-    import zmq
-    zmq_context = zmq.Context.instance()
-    
+
     # 1. Initialize agents based on config
     agents = []
     for agent_name, agent_cfg in config.get("agents", {}).items():
         atype = agent_cfg.get("type")
         symbol_map = agent_cfg.get("symbol_map", {})
-        
+
         if atype == "mt5_ea":
-            bind_addr = agent_cfg.get("zmq_bind")
+            bind_addr = agent_cfg.get("tcp_bind")
             try:
-                agent = Mt5Agent(agent_name, symbol_map, bind_addr, zmq_context)
+                agent = Mt5Agent(agent_name, symbol_map, bind_addr)
+                await agent.start()
                 agents.append(agent)
             except Exception as e:
                 print(f"Failed to initialize MT5 Agent '{agent_name}': {e}")
@@ -104,19 +102,19 @@ async def main():
                 api_url=agent_cfg.get("api_url", "https://www.okx.com")
             )
             agents.append(agent)
-            
+
     client = TickEngineClient(
         base_url=config["stream"]["url"],
         api_key=config["stream"]["api_key"],
         account_id=config["stream"]["account_id"]
     )
-    
+
     print("Connecting to TickEngine stream...")
     async for event in client.stream_events():
         details = extract_order_details(event)
         if not details:
             continue
-            
+
         for agent in agents:
             if agent.can_handle(details["symbol"]):
                 try:

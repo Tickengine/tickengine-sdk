@@ -9,7 +9,6 @@ description = "High-Performance Binary Client SDK & MetaTrader 5 Bridge for Tick
 tokio = { version = "1.44", features = ["full"] }
 reqwest = { version = "0.13", features = ["json", "rustls"] }
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots", "url"] }
-zeromq = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rmp-serde = "1.3"

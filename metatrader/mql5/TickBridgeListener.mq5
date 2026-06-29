@@ -1,21 +1,21 @@
 #property copyright "TickEngine"
 #property link      "https://pasifi.app"
-#property version   "2.00"
+#property version   "3.00"
 #property strict
 
-// --- ZeroMQ Library Includes (Requires mql-zmq) ---
-#include <Zmq/Zmq.mqh>
+// ─── Configuration Inputs ────────────────────────────────────────────────────
+input string InpTcpHost      = "localhost";  // TickBridge TCP Host / IP
+input uint   InpTcpPort      = 5555;         // TickBridge TCP Port
+input uint   InpConnTimeout  = 5000;         // Connection Timeout (ms)
+input uint   InpMaxSlippage  = 30;           // Max Allowed Slippage (in points/pipettes)
+input uint   InpMaxRetries   = 3;            // Max Order Submission Re-attempts
+input uint   InpRetryDelayMs = 200;          // Retry Backoff Multiplier (in ms)
+input uint   InpEAMagic      = 999123;       // Expert Advisor Magic Number
 
-input string InpZmqAddress    = "tcp://localhost:5555"; // TickBridge ZeroMQ Address
-input uint   InpMaxSlippage   = 30;                     // Max Allowed Slippage (in points/pipettes)
-input uint   InpMaxRetries    = 3;                      // Max Order Submission Re-attempts
-input uint   InpRetryDelayMs  = 200;                    // Retry Backoff Multiplier (in ms)
-input uint   InpEAMagic       = 999123;                 // Expert Advisor Magic Number
+// ─── TCP Socket Handle ───────────────────────────────────────────────────────
+int g_socket = INVALID_HANDLE;
 
-Context context;
-Socket subSocket(context, ZMQ_SUB);
-
-// --- High-Performance C-Compatible Binary Layout (Exactly 79 Bytes) ---
+// ─── High-Performance C-Compatible Binary Layout (Exactly 79 Bytes) ──────────
 struct MqlTradeSignal {
    uint magic;          // 4 bytes: Magic check signature (0x5449434B / 'TICK')
    uchar event_type;    // 1 byte:  0=Trade, 1=Order, 2=Alert, 3=Metric
@@ -70,9 +70,8 @@ void AddSignalToHistory(const uchar &sig_id[])
 {
    string hex = SignalIdToHex(sig_id);
    int total = ArraySize(ProcessedSignals);
-   
+
    if(total >= MaxProcessedHistory) {
-      // Shift array left to evict oldest element
       for(int i = 1; i < total; i++) {
          ProcessedSignals[i-1] = ProcessedSignals[i];
       }
@@ -84,20 +83,44 @@ void AddSignalToHistory(const uchar &sig_id[])
 }
 
 //+------------------------------------------------------------------+
+//| Try to (re)connect to the TCP bridge                            |
+//+------------------------------------------------------------------+
+bool ConnectToBridge()
+{
+   if(g_socket != INVALID_HANDLE) {
+      SocketClose(g_socket);
+      g_socket = INVALID_HANDLE;
+   }
+
+   g_socket = SocketCreate();
+   if(g_socket == INVALID_HANDLE) {
+      Print("Error: SocketCreate failed. Error code: ", GetLastError());
+      return false;
+   }
+
+   if(!SocketConnect(g_socket, InpTcpHost, InpTcpPort, InpConnTimeout)) {
+      Print("Error: Cannot connect to TickBridge at ",
+            InpTcpHost, ":", InpTcpPort,
+            "  Error code: ", GetLastError());
+      SocketClose(g_socket);
+      g_socket = INVALID_HANDLE;
+      return false;
+   }
+
+   Print("Connected to TickBridge at ", InpTcpHost, ":", InpTcpPort);
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   Print("Connecting to TickBridge at ", InpZmqAddress);
-   if(!subSocket.connect(InpZmqAddress)) {
-      Print("Error: Failed to connect to ZeroMQ Bridge");
-      return(INIT_FAILED);
+   Print("Connecting to TickBridge at ", InpTcpHost, ":", InpTcpPort, " ...");
+   if(!ConnectToBridge()) {
+      // Non-fatal: timer will retry
+      Print("Warning: Initial connection failed — will retry on timer.");
    }
-   
-   // Subscribe to empty string "" wildcard to receive all published signals
-   subSocket.subscribe("");
-   Print("ZeroMQ Wildcard Subscription Enabled. Subscribed to all topics.");
-   
    EventSetTimer(1);
    return(INIT_SUCCEEDED);
 }
@@ -108,6 +131,10 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   if(g_socket != INVALID_HANDLE) {
+      SocketClose(g_socket);
+      g_socket = INVALID_HANDLE;
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -117,15 +144,15 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
 {
    MqlTradeRequest request;
    MqlTradeResult result;
-   
+
    ZeroMemory(request);
    ZeroMemory(result);
-   
+
    string symbolStr = CharArrayToString(sig.symbol);
-   
+
    ENUM_ORDER_TYPE orderType;
    ENUM_TRADE_ACTION action = TRADE_ACTION_DEAL;
-   
+
    // 1. Map event variables to ENUM_ORDER_TYPE
    if(sig.order_type == 0) { // Market Order
       orderType = (sig.side == 0) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
@@ -139,15 +166,15 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
       Print("Error: Unsupported order type: ", sig.order_type);
       return false;
    }
-   
+
    request.action       = action;
    request.symbol       = symbolStr;
    request.volume       = sig.size;
    request.type         = orderType;
    request.deviation    = InpMaxSlippage;
    request.magic        = InpEAMagic;
-   
-   // 2. Setup Price (Market orders require Ask/Bid, Pending orders use the signal's price)
+
+   // 2. Setup Price
    if(sig.order_type == 0) {
       if(sig.side == 0) {
          request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
@@ -157,15 +184,15 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
    } else {
       request.price = sig.price;
    }
-   
+
    // 3. Perform execution with exponential backoff retries
    uint retries = 0;
    bool success = false;
-   
+
    while(retries < InpMaxRetries) {
       if(OrderSend(request, result)) {
          if(result.retcode == TRADE_RETCODE_DONE || result.retcode == TRADE_RETCODE_PLACED) {
-            Print("Success: Order executed! Ticket: ", result.order, 
+            Print("Success: Order executed! Ticket: ", result.order,
                   ", Symbol: ", symbolStr, ", Lots: ", sig.size, ", Price: ", request.price);
             success = true;
             break;
@@ -175,14 +202,13 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
       } else {
          Print("Error: OrderSend failed. Error code: ", GetLastError());
       }
-      
+
       retries++;
       if(retries < InpMaxRetries) {
          int backoff = (int)InpRetryDelayMs * retries;
          Print("Liquidity or execution failure. Retry attempt ", retries, " in ", backoff, " ms...");
          Sleep(backoff);
-         
-         // Refresh prices for market orders on retry loop
+
          if(sig.order_type == 0) {
             if(sig.side == 0) {
                request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
@@ -192,67 +218,88 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
          }
       }
    }
-   
+
    return success;
 }
 
 //+------------------------------------------------------------------+
-//| Timer function - Core Signal receiver & routing                  |
+//| Read exactly N bytes from the TCP socket into buf               |
+//| Returns true only when exactly N bytes have been read.          |
+//+------------------------------------------------------------------+
+bool ReadExactly(int socket, uchar &buf[], uint n)
+{
+   uint total = 0;
+   uchar chunk[];
+   while(total < n) {
+      uint readable = SocketIsReadable(socket);
+      if(readable == 0) return false; // no data yet — non-blocking bail
+      uint want  = MathMin(n - total, readable);
+      uint got   = SocketRead(socket, chunk, want, 100);
+      if(got == 0) return false;
+      for(uint i = 0; i < got; i++) {
+         buf[total + i] = chunk[i];
+      }
+      total += got;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Timer function — Core signal receiver & routing                  |
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   ZmqMsg msg;
-   // Check for new ZeroMQ messages (non-blocking)
-   if(subSocket.recv(msg, ZMQ_DONTWAIT) > 0) {
-      string topic = msg.getData();
-      
-      // Receive binary payload
-      if(subSocket.recv(msg, ZMQ_DONTWAIT) > 0) {
-         uchar bytes[];
-         msg.getData(bytes);
-         
-         int size = ArraySize(bytes);
-         if(size == 79) {
-            MqlTradeSignalUnion u;
-            
-            // Memory cast raw bytes into structure
-            for(int i = 0; i < 79; i++) {
-               u.bytes[i] = bytes[i];
-            }
-            
-            // 1. Verify Magic Signature
-            if(u.signal.magic != 0x5449434B) {
-               Print("Error: Invalid magic signature in received binary signal");
-               return;
-            }
-            
-            // 2. Perform Signal Deduplication Check
-            if(IsSignalDuplicate(u.signal.signal_id)) {
-               // Discard duplicate immediately
-               return;
-            }
-            
-            // Register signal ID to block future duplicates
-            AddSignalToHistory(u.signal.signal_id);
-            
-            string symbolStr = CharArrayToString(u.signal.symbol);
-            string uuidHex = SignalIdToHex(u.signal.signal_id);
-            
-            Print("Signal Accepted -> Symbol: ", symbolStr, 
-                  ", ID: ", uuidHex,
-                  ", EventType: ", u.signal.event_type,
-                  ", OrderType: ", u.signal.order_type,
-                  ", Side: ", u.signal.side,
-                  ", Size: ", DoubleToString(u.signal.size, 5),
-                  ", Price: ", DoubleToString(u.signal.price, 5));
-            
-            // 3. Automate order execution (Ignore metric update events)
-            if(u.signal.event_type != 3) {
-               ExecuteOrder(u.signal);
-            }
-         } else {
-            Print("Warning: Received binary frame with unexpected size: ", size, " (expected 79)");
-         }
+   // Reconnect if socket is gone
+   if(g_socket == INVALID_HANDLE) {
+      Print("TCP socket lost — attempting reconnect...");
+      ConnectToBridge();
+      return;
+   }
+
+   // Drain all available complete 79-byte frames in one timer tick
+   while(SocketIsReadable(g_socket) > 0) {
+      uchar buf[];
+      ArrayResize(buf, 79);
+
+      if(!ReadExactly(g_socket, buf, 79)) {
+         // Partial read or nothing available — try again next tick
+         break;
+      }
+
+      MqlTradeSignalUnion u;
+      for(int i = 0; i < 79; i++) {
+         u.bytes[i] = buf[i];
+      }
+
+      // 1. Verify Magic Signature
+      if(u.signal.magic != 0x5449434B) {
+         Print("Error: Invalid magic signature in received signal — possible stream corruption");
+         // Close and reconnect to resync
+         SocketClose(g_socket);
+         g_socket = INVALID_HANDLE;
+         break;
+      }
+
+      // 2. Signal Deduplication
+      if(IsSignalDuplicate(u.signal.signal_id)) {
+         continue;
+      }
+      AddSignalToHistory(u.signal.signal_id);
+
+      string symbolStr = CharArrayToString(u.signal.symbol);
+      string uuidHex   = SignalIdToHex(u.signal.signal_id);
+
+      Print("Signal Accepted -> Symbol: ", symbolStr,
+            ", ID: ", uuidHex,
+            ", EventType: ", u.signal.event_type,
+            ", OrderType: ", u.signal.order_type,
+            ", Side: ", u.signal.side,
+            ", Size: ", DoubleToString(u.signal.size, 5),
+            ", Price: ", DoubleToString(u.signal.price, 5));
+
+      // 3. Execute order (skip metric update events)
+      if(u.signal.event_type != 3) {
+         ExecuteOrder(u.signal);
       }
    }
 }
