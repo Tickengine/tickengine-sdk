@@ -297,9 +297,7 @@ void OnTimer()
             ", Size: ", DoubleToString(u.signal.size, 5),
             ", Price: ", DoubleToString(u.signal.price, 5));
 
-      // 3. Execute order (skip metric update events)
-      if(u.signal.event_type != 3) {
+      // 3. Execute order
          ExecuteOrder(u.signal);
-      }
    }
 }

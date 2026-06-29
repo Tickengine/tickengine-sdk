@@ -83,22 +83,6 @@ function extractOrderDetails(event: any): OrderDetails | null {
         };
     }
 
-    if (etype === "metric") {
-        // AccountMetricEventDto keys: accountId, equity, balance, timestamp
-        return {
-            symbol: String(data.accountId ?? data.account_id),
-            side: "BUY",
-            orderType: "MARKET",
-            quantity: Number(data.equity || 0),
-            price: Number(data.balance || 0),
-            signalId: data.accountId ?? data.account_id,
-            timestamp: Number(data.timestamp || 0),
-            eventType: 3,
-            orderTypeRaw: 0,
-            sideRaw: 0,
-        };
-    }
-
     return null;
 }
 
