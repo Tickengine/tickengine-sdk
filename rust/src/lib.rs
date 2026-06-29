@@ -23,6 +23,7 @@ pub enum OrderStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum OrderType {
     Market,
     Limit,

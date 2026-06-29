@@ -4,33 +4,48 @@ import json
 from tickengine_sdk import TickEngineClient
 from agents import Mt5Agent, BinanceAgent, OkxAgent
 
+def _order_type_raw(order_type_val) -> int:
+    """Map stream order type value to MQL5 raw int. 0=Market, 1=Limit, 2=Stop."""
+    if order_type_val in [1, "Limit", "limit"]:
+        return 1
+    if order_type_val in [2, "Stop", "stop"]:
+        return 2
+    return 0  # Market (default)
+
 def extract_order_details(event: dict) -> dict:
     etype = event.get("type")
     data = event.get("data", {})
     if etype == "trade":
+        # Stream serializes TradeExecutedEventDto with rename_all=camelCase
+        ot_raw = _order_type_raw(data.get("type_"))  # field name is `type_` → serde strips underscore → "type" key... but may vary
+        # try both key forms defensively
+        ot_val = data.get("type_") or data.get("type")
+        ot_raw = _order_type_raw(ot_val)
         return {
             "symbol": data.get("symbol"),
             "side": "BUY" if data.get("side") in [0, "Buy", "buy"] else "SELL",
-            "order_type": "LIMIT" if data.get("type") in [1, "Limit", "limit"] else "MARKET",
+            "order_type": "LIMIT" if ot_raw == 1 else ("STOP" if ot_raw == 2 else "MARKET"),
             "quantity": float(data.get("size", 0)),
             "price": float(data.get("price", 0)),
-            "signal_id": data.get("trade_id"),
+            "signal_id": data.get("tradeId"),        # camelCase from stream
             "timestamp": int(data.get("timestamp", 0)),
             "event_type": 0,
-            "order_type_raw": 1 if data.get("type") in [1, "Limit", "limit"] else 0,
+            "order_type_raw": ot_raw,
             "side_raw": 0 if data.get("side") in [0, "Buy", "buy"] else 1
         }
     elif etype == "order":
+        # Stream serializes OrderEventDto with rename_all=camelCase
+        ot_raw = _order_type_raw(data.get("orderType"))   # camelCase key
         return {
             "symbol": data.get("symbol"),
             "side": "BUY" if data.get("side") in [0, "Buy", "buy"] else "SELL",
-            "order_type": "LIMIT" if data.get("order_type") in [1, "Limit", "limit"] else "MARKET",
+            "order_type": "LIMIT" if ot_raw == 1 else ("STOP" if ot_raw == 2 else "MARKET"),
             "quantity": float(data.get("size", 0)),
-            "price": float(data.get("trigger_price") or 0),
-            "signal_id": data.get("order_id"),
+            "price": float(data.get("triggerPrice") or 0),   # camelCase key
+            "signal_id": data.get("orderId"),                # camelCase key
             "timestamp": int(data.get("timestamp", 0)),
             "event_type": 1,
-            "order_type_raw": 1 if data.get("order_type") in [1, "Limit", "limit"] else 0,
+            "order_type_raw": ot_raw,
             "side_raw": 0 if data.get("side") in [0, "Buy", "buy"] else 1
         }
     elif etype == "alert":
