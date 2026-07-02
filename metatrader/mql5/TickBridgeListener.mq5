@@ -111,12 +111,69 @@ bool ConnectToBridge()
    return true;
 }
 
+// ─── Stateful Position Mapping (Hedging Reconciliation) ──────────────────────
+string g_map_uuids[];
+ulong  g_map_tickets[];
+
+// Scan MT5 active positions to build/update the memory mapping
+void SyncOpenPositions()
+{
+   ArrayResize(g_map_uuids, 0);
+   ArrayResize(g_map_tickets, 0);
+   
+   int total = PositionsTotal();
+   for(int i = 0; i < total; i++) {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0) {
+         if(PositionGetInteger(POSITION_MAGIC) == InpEAMagic) {
+            string comment = PositionGetString(POSITION_COMMENT);
+            // Check if comment holds our 30-char hex UUID (limit for MT5 comment is 31 chars)
+            if(StringLen(comment) >= 30) {
+               int size = ArraySize(g_map_uuids);
+               ArrayResize(g_map_uuids, size + 1);
+               ArrayResize(g_map_tickets, size + 1);
+               g_map_uuids[size] = StringSubstr(comment, 0, 30);
+               g_map_tickets[size] = ticket;
+               Print("Synced open position: Ticket=", ticket, ", UUID=", g_map_uuids[size]);
+            }
+         }
+      }
+   }
+}
+
+// Find position index in memory map by comparing the first 30 characters
+int FindPositionByUuid(const string &uuid)
+{
+   string target = StringSubstr(uuid, 0, 30);
+   int total = ArraySize(g_map_uuids);
+   for(int i = 0; i < total; i++) {
+      if(g_map_uuids[i] == target) {
+         return i;
+      }
+   }
+   return -1;
+}
+
+// Remove position from memory map
+void RemovePositionFromMap(int index)
+{
+   int total = ArraySize(g_map_uuids);
+   if(index < 0 || index >= total) return;
+   for(int i = index + 1; i < total; i++) {
+      g_map_uuids[i-1] = g_map_uuids[i];
+      g_map_tickets[i-1] = g_map_tickets[i];
+   }
+   ArrayResize(g_map_uuids, total - 1);
+   ArrayResize(g_map_tickets, total - 1);
+}
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
    Print("Connecting to TickBridge at ", InpTcpHost, ":", InpTcpPort, " ...");
+   SyncOpenPositions(); // Populate memory map at startup
    if(!ConnectToBridge()) {
       // Non-fatal: timer will retry
       Print("Warning: Initial connection failed — will retry on timer.");
@@ -138,10 +195,13 @@ void OnDeinit(const int reason)
 }
 
 //+------------------------------------------------------------------+
-//| Automated Order Submission with Slippage & Retries               |
+//| Automated Order/Position Submission                              |
 //+------------------------------------------------------------------+
 bool ExecuteOrder(const MqlTradeSignal &sig)
 {
+   string signalUuid = SignalIdToHex(sig.signal_id);
+   int mapIdx = FindPositionByUuid(signalUuid);
+
    MqlTradeRequest request;
    MqlTradeResult result;
 
@@ -149,43 +209,69 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
    ZeroMemory(result);
 
    string symbolStr = CharArrayToString(sig.symbol);
-
-   ENUM_ORDER_TYPE orderType;
    ENUM_TRADE_REQUEST_ACTIONS action = TRADE_ACTION_DEAL;
 
-   // 1. Map event variables to ENUM_ORDER_TYPE
-   if(sig.order_type == 0) { // Market Order
-      orderType = (sig.side == 0) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
-   } else if(sig.order_type == 1) { // Limit Order
-      orderType = (sig.side == 0) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
-      action = TRADE_ACTION_PENDING;
-   } else if(sig.order_type == 2) { // Stop Order
-      orderType = (sig.side == 0) ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
-      action = TRADE_ACTION_PENDING;
-   } else {
-      Print("Error: Unsupported order type: ", sig.order_type);
-      return false;
-   }
-
-   request.action       = action;
-   request.symbol       = symbolStr;
-   request.volume       = sig.size;
-   request.type         = orderType;
-   request.deviation    = InpMaxSlippage;
-   request.magic        = InpEAMagic;
-
-   // 2. Setup Price
-   if(sig.order_type == 0) {
-      if(sig.side == 0) {
-         request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
+   if(mapIdx != -1) {
+      // ─── CLOSE POSITION (HEDGING EXIT) ───
+      ulong ticket = g_map_tickets[mapIdx];
+      Print("Exiting position - Target Ticket: ", ticket, ", UUID: ", signalUuid);
+      
+      request.action    = TRADE_ACTION_DEAL;
+      request.position  = ticket;
+      request.symbol    = symbolStr;
+      request.volume    = sig.size;
+      request.deviation = InpMaxSlippage;
+      request.magic     = InpEAMagic;
+      
+      // Select position to get opposite order type
+      if(PositionSelectByTicket(ticket)) {
+         long posType = PositionGetInteger(POSITION_TYPE);
+         request.type = (posType == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
       } else {
+         request.type = (sig.side == 0) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+      }
+      
+      if(request.type == ORDER_TYPE_SELL) {
          request.price = SymbolInfoDouble(symbolStr, SYMBOL_BID);
+      } else {
+         request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
       }
    } else {
-      request.price = sig.price;
+      // ─── OPEN NEW POSITION ───
+      ENUM_ORDER_TYPE orderType;
+      if(sig.order_type == 0) { // Market Order
+         orderType = (sig.side == 0) ? ORDER_TYPE_BUY : ORDER_TYPE_SELL;
+      } else if(sig.order_type == 1) { // Limit Order
+         orderType = (sig.side == 0) ? ORDER_TYPE_BUY_LIMIT : ORDER_TYPE_SELL_LIMIT;
+         action = TRADE_ACTION_PENDING;
+      } else if(sig.order_type == 2) { // Stop Order
+         orderType = (sig.side == 0) ? ORDER_TYPE_BUY_STOP : ORDER_TYPE_SELL_STOP;
+         action = TRADE_ACTION_PENDING;
+      } else {
+         Print("Error: Unsupported order type: ", sig.order_type);
+         return false;
+      }
+
+      request.action    = action;
+      request.symbol    = symbolStr;
+      request.volume    = sig.size;
+      request.type      = orderType;
+      request.deviation = InpMaxSlippage;
+      request.magic     = InpEAMagic;
+      request.comment   = signalUuid; // Save 30-char hex UUID in comment
+
+      if(sig.order_type == 0) {
+         if(sig.side == 0) {
+            request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
+         } else {
+            request.price = SymbolInfoDouble(symbolStr, SYMBOL_BID);
+         }
+      } else {
+         request.price = sig.price;
+      }
    }
 
-   // 3. Perform execution with exponential backoff retries
+   // Perform execution with exponential backoff retries
    uint retries = 0;
    bool success = false;
 
@@ -194,6 +280,14 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
          if(result.retcode == TRADE_RETCODE_DONE || result.retcode == TRADE_RETCODE_PLACED) {
             Print("Success: Order executed! Ticket: ", result.order,
                   ", Symbol: ", symbolStr, ", Lots: ", sig.size, ", Price: ", request.price);
+            
+            if(mapIdx != -1) {
+               // Successfully exited, remove from local map
+               RemovePositionFromMap(mapIdx);
+            } else if(action == TRADE_ACTION_DEAL) {
+               // Successfully opened a deal, refresh mappings from terminal
+               SyncOpenPositions();
+            }
             success = true;
             break;
          } else {
@@ -210,7 +304,7 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
          Sleep(backoff);
 
          if(sig.order_type == 0) {
-            if(sig.side == 0) {
+            if(request.type == ORDER_TYPE_BUY) {
                request.price = SymbolInfoDouble(symbolStr, SYMBOL_ASK);
             } else {
                request.price = SymbolInfoDouble(symbolStr, SYMBOL_BID);

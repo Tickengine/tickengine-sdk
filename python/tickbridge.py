@@ -29,13 +29,14 @@ def extract_order_details(event: dict) -> dict | None:
         # TradeExecutedEventDto (camelCase): type → "Market"/"Limit"/"Stop", tradeId, side, size, price
         ot = _order_type_raw(data.get("type"))
         sd, sd_raw = _side(data.get("side"))
+        signal_id = data.get("entryId") if data.get("status") == "closed" and data.get("entryId") else data.get("tradeId")
         return {
             "symbol":         data.get("symbol"),
             "side":           sd,
             "order_type":     _order_type_label(ot),
             "quantity":       float(data.get("size", 0)),
             "price":          float(data.get("price", 0)),
-            "signal_id":      data.get("tradeId"),
+            "signal_id":      signal_id,
             "timestamp":      int(data.get("timestamp", 0)),
             "event_type":     0,
             "order_type_raw": ot,

@@ -22,13 +22,21 @@ fn extract_order_details(event: &ClientEvent) -> Option<MappedOrder> {
                 OrderType::Limit => "LIMIT".to_string(),
                 OrderType::Stop => "STOP".to_string(),
             };
+            let signal_id = if e.status == tickengine_sdk::OrderStatus::Closed {
+                e.entry_id
+                    .as_ref()
+                    .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                    .unwrap_or(e.trade_id)
+            } else {
+                e.trade_id
+            };
             Some(MappedOrder {
                 symbol: e.symbol.clone(),
                 side,
                 order_type,
                 quantity: e.size.to_f64().unwrap_or(0.0),
                 price: e.price.to_f64(),
-                signal_id: e.trade_id,
+                signal_id,
                 timestamp: e.timestamp,
             })
         }
