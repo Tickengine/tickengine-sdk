@@ -151,7 +151,7 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
    string symbolStr = CharArrayToString(sig.symbol);
 
    ENUM_ORDER_TYPE orderType;
-   ENUM_TRADE_ACTION action = TRADE_ACTION_DEAL;
+   ENUM_TRADE_REQUEST_ACTIONS action = TRADE_ACTION_DEAL;
 
    // 1. Map event variables to ENUM_ORDER_TYPE
    if(sig.order_type == 0) { // Market Order
@@ -205,7 +205,7 @@ bool ExecuteOrder(const MqlTradeSignal &sig)
 
       retries++;
       if(retries < InpMaxRetries) {
-         int backoff = (int)InpRetryDelayMs * retries;
+         int backoff = (int)(InpRetryDelayMs * retries);
          Print("Liquidity or execution failure. Retry attempt ", retries, " in ", backoff, " ms...");
          Sleep(backoff);
 
@@ -234,12 +234,12 @@ bool ReadExactly(int socket, uchar &buf[], uint n)
       uint readable = SocketIsReadable(socket);
       if(readable == 0) return false; // no data yet — non-blocking bail
       uint want  = MathMin(n - total, readable);
-      uint got   = SocketRead(socket, chunk, want, 100);
-      if(got == 0) return false;
-      for(uint i = 0; i < got; i++) {
+      int got   = SocketRead(socket, chunk, want, 100);
+      if(got <= 0) return false;
+      for(uint i = 0; i < (uint)got; i++) {
          buf[total + i] = chunk[i];
       }
-      total += got;
+      total += (uint)got;
    }
    return true;
 }
@@ -266,7 +266,7 @@ void OnTimer()
          break;
       }
 
-      MqlTradeSignalUnion u;
+      MqlTradeSignalUnion u = {};
       for(int i = 0; i < 79; i++) {
          u.bytes[i] = buf[i];
       }
