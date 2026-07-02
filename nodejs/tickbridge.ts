@@ -37,7 +37,7 @@ function extractOrderDetails(event: any): OrderDetails | null {
             orderType: orderTypeLabel(otRaw),
             quantity: Number(data.size || 0),
             price: Number(data.price || 0),
-            signalId: data.tradeId,
+            signalId: data.status === "closed" && data.entryId ? data.entryId : data.tradeId,
             timestamp: Number(data.timestamp || 0),
             eventType: 0,
             orderTypeRaw: otRaw,
