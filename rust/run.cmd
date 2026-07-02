@@ -32,6 +32,11 @@ if errorlevel 1 goto no_cargo
 
 echo.
 echo Running Rust SDK in release mode...
+if not exist config.json if exist ..\config.json (
+    echo Using shared configuration file from parent directory: ..\config.json
+    set TICKENGINE_CONFIG_FILE=..\config.json
+)
+set RUST_LOG=info
 cargo run --release
 if errorlevel 1 goto failed
 goto end
