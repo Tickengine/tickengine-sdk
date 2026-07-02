@@ -8,19 +8,20 @@ if errorlevel 1 goto failed
 
 :: Check if python is in PATH
 where python >nul 2>nul
-if errorlevel 1 (
-    echo.
-    echo Python is not in the current session's PATH.
-    echo Please restart your terminal and run this script again.
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto no_python
 
 echo.
 echo Running Python SDK (tickbridge.py)...
 python tickbridge.py
 if errorlevel 1 goto failed
 goto end
+
+:no_python
+echo.
+echo Python is not in the current session's PATH.
+echo Please restart your terminal and run this script again.
+pause
+exit /b 1
 
 :failed
 echo.
