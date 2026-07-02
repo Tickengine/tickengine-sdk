@@ -42,7 +42,7 @@ exit /b 1
 
 :needs_cpp
 echo Installing Visual Studio Build Tools (C++ Workload)...
-winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --accept-package-agreements --accept-source-agreements --override "--passive --locale en-US --add Microsoft.VisualStudio.Workload.VCTools"
+winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --accept-package-agreements --accept-source-agreements --override "--passive --locale en-US --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 if not errorlevel 1 goto cpp_install_done
 
 echo Winget install failed. Trying standalone installer...
