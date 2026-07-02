@@ -45,7 +45,7 @@ Example `config.json`:
 ```json
 {
   "stream": {
-    "url": "wss://api.pasifi.app/v1/stream/ws",
+    "url": "wss://tickengine.com/stream/ws",
     "api_key": "YOUR_TICKENGINE_API_KEY",
     "account_id": "YOUR_TICKENGINE_ACCOUNT_ID"
   },
