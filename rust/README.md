@@ -1,6 +1,6 @@
 # 🦀 Rust High-Speed Client Bridge (`tickbridge`)
 
-The Rust Client is the **highly recommended** entry point for production trading setups. It connects to the TickEngine WebSocket stream, decodes binary MessagePack payloads, performs dynamic local symbol mapping, and publishes raw 79-byte packed C-struct signals to MetaTrader 5 via ZeroMQ.
+The Rust Client is the **highly recommended** entry point for production trading setups. It connects to the TickEngine WebSocket stream, decodes binary MessagePack payloads, performs dynamic local symbol mapping, and publishes raw 79-byte packed C-struct signals to MetaTrader 5 via TCP.
 
 ---
 
@@ -38,15 +38,27 @@ Brokers often append Micro/ECN/Pro suffixes (e.g. `EURUSDc` or `EURUSD.pro`) to 
 
 ---
 
-## 💻 Step 3: Configure Environment Variables
-Create a file named `.env` in the `rust/` directory or export these variables in your terminal:
+## 💻 Step 3: Configure the `config.json` File
+Modify the `config.json` file in the root of the SDK directory (or specify its location via the `TICKENGINE_CONFIG_FILE` environment variable).
 
-```ini
-TICKENGINE_STREAM_URL=wss://tickengine.com/stream/ws
-TICKENGINE_API_KEY=your_secured_api_key_here
-TICKENGINE_ACCOUNT_ID=your_sim_or_live_account_uuid
-TICKENGINE_ZMQ_BIND=tcp://*:5555
-TICKENGINE_SYMBOL_MAP_FILE=symbols.json
+Example `config.json`:
+```json
+{
+  "stream": {
+    "url": "wss://api.pasifi.app/v1/stream/ws",
+    "api_key": "YOUR_TICKENGINE_API_KEY",
+    "account_id": "YOUR_TICKENGINE_ACCOUNT_ID"
+  },
+  "agents": {
+    "mt5_ea": {
+      "type": "mt5_ea",
+      "tcp_bind": "tcp://127.0.0.1:5555",
+      "symbol_map": {
+        "EURUSD": "EURUSD"
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -64,4 +76,4 @@ Launch the optimized binary:
 ```bash
 ./target/release/tickbridge
 ```
-You should see logging output showing successful connection to the stream, loaded symbol maps, and bound ZeroMQ sockets, waiting to broadcast signals to your MetaTrader 5 EA!
+You should see logging output showing successful connection to the stream, loaded symbol maps, and bound TCP sockets, waiting to broadcast signals to your MetaTrader 5 EA!

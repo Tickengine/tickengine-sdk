@@ -1,6 +1,6 @@
 # 📈 MetaTrader 5 Expert Advisor (EA) Reference Guide
 
-The MetaTrader 5 Expert Advisor `TickBridgeListener.mq5` acts as the execution terminal in this automated binary data pipeline. It binds to the client ZeroMQ publisher socket, accepts raw binary packed structures, deduplicates signals, and places trades instantly.
+The MetaTrader 5 Expert Advisor `TickBridgeListener.mq5` acts as the execution terminal in this automated binary data pipeline. It connects to the client TCP server socket, accepts raw binary packed structures, deduplicates signals, and places trades instantly.
 
 ---
 
@@ -10,7 +10,8 @@ When dragging the `TickBridgeListener` onto your MetaTrader 5 chart, you can con
 
 | Parameter | Type | Default Value | Description |
 | :--- | :---: | :---: | :--- |
-| **InpZmqAddress** | `string` | `tcp://localhost:5555` | The socket address of the client bridge running locally or in your network. |
+| **InpTcpHost** | `string` | `"127.0.0.1"` | The host address of the client bridge. |
+| **InpTcpPort** | `uint` | `5555` | The port of the client bridge. |
 | **InpMaxSlippage** | `uint` | `30` | The maximum allowed price deviation in points/pipettes. Prevents executions during extreme spreads. |
 | **InpMaxRetries** | `uint` | `3` | Maximum re-attempts to send a trade order if the server returns a temporary requote or failure. |
 | **InpRetryDelayMs** | `uint` | `200` | Backoff delay multiplier in milliseconds. Delay between retries will be `InpRetryDelayMs * retry_count`. |
@@ -20,8 +21,8 @@ When dragging the `TickBridgeListener` onto your MetaTrader 5 chart, you can con
 
 ## 🚀 Key Architectural Guards
 
-### 1. ZeroMQ Wildcard Subscription
-The EA subscribes to the empty string wildcard (`subSocket.subscribe("")`). This allows it to receive **all** published trade signals and alerts from the broker regardless of their ZeroMQ topic (e.g. `trade.EURUSD`, `alert.GBPUSD`, etc.). 
+### 1. TCP Client Socket Connection
+The EA connects directly to the TCP socket server exposed by the bridge (Rust, NodeJS, or Python client). It continuously receives 79-byte raw binary packed structures containing trade instructions.
 
 The EA reads the resolved `symbol` field directly inside the received 79-byte structure to determine what chart/instrument to place the trade on, making your automated execution 100% dynamic.
 

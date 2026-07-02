@@ -4,7 +4,7 @@
 #property strict
 
 // ─── Configuration Inputs ────────────────────────────────────────────────────
-input string InpTcpHost      = "localhost";  // TickBridge TCP Host / IP
+input string InpTcpHost      = "127.0.0.1";  // TickBridge TCP Host / IP
 input uint   InpTcpPort      = 5555;         // TickBridge TCP Port
 input uint   InpConnTimeout  = 5000;         // Connection Timeout (ms)
 input uint   InpMaxSlippage  = 30;           // Max Allowed Slippage (in points/pipettes)

@@ -2,7 +2,7 @@
 
 Welcome to the official, ultra-low latency integration SDK for **TickEngine**. 
 
-This repository provides highly optimized client libraries in multiple programming languages to consume real-time MessagePack binary events from the TickEngine stream and execute them instantly in MetaTrader 5 using raw C-compatible memory-cast packed structures over ZeroMQ.
+This repository provides highly optimized client libraries in multiple programming languages to consume real-time MessagePack binary events from the TickEngine stream and execute them instantly in MetaTrader 5 using raw C-compatible memory-cast packed structures over TCP.
 
 ---
 
@@ -13,27 +13,8 @@ For production algorithmic trading, **we strongly recommend using the Rust Clien
 
 ---
 
-## 🛠️ Step 1: Install ZeroMQ Globally
-`tickbridge` communicates with the MetaTrader 5 Expert Advisor via ZeroMQ. You must install the ZeroMQ development libraries on the host running the client bridge.
-
-### macOS (Homebrew)
-```bash
-brew install zeromq
-```
-
-### Linux (Debian/Ubuntu)
-```bash
-sudo apt-get update && sudo apt-get install -y libzmq3-dev
-```
-
-### Windows
-1. Download the pre-built ZeroMQ binaries or compile them from source using the official installer on [zeromq.org](https://zeromq.org/download/).
-2. Add the directory containing `libzmq.dll` to your system `PATH`.
-
----
-
-## 📈 Step 2: Install and Configure the MetaTrader 5 EA
-The MetaTrader 5 Expert Advisor script `TickBridgeListener.mq5` resides under `metatrader/mql5/`. It acts as a ZeroMQ wildcard subscriber, receiving 79-byte binary structures, deduplicating them using UUID caches, and placing trades instantly.
+## 📈 Step 1: Install and Configure the MetaTrader 5 EA
+The MetaTrader 5 Expert Advisor script `TickBridgeListener.mq5` resides under `metatrader/mql5/`. It acts as a TCP client listener, receiving 79-byte binary structures, deduplicating them using UUID caches, and placing trades instantly.
 
 ### Installation Instructions:
 1. Open your **MetaTrader 5 terminal**.
@@ -45,12 +26,12 @@ The MetaTrader 5 Expert Advisor script `TickBridgeListener.mq5` resides under `m
 ### Crucial Expert Advisor Configuration:
 For the EA to place trades automatically:
 1. In the EA input settings dialog:
-   * **InpZmqAddress**: Address of the ZeroMQ bridge (default: `tcp://localhost:5555`).
+   * **InpTcpHost**: Address of the client bridge (default: `"127.0.0.1"`).
+   * **InpTcpPort**: Port of the client bridge (default: `5555`).
    * **InpMaxSlippage**: Maximum allowed slippage deviation in points (default: `30` points/pipettes).
    * **InpMaxRetries**: Re-attempts for order execution if server returns requote (default: `3`).
 2. Go to **Tools** -> **Options** -> **Expert Advisors**:
    * Check **"Allow algorithmic trading"**.
-   * Check **"Allow DLL imports"** (required by the ZeroMQ DLL).
 
 ---
 
