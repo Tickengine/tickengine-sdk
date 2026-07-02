@@ -1,6 +1,6 @@
 # 🟢 Node.js / TypeScript Client SDK
 
-The Node.js SDK provides a highly concurrent client to connect to the TickEngine stream and decode binary MessagePack WebSocket packets. It also includes the `packMqlSignal` binary buffer utility to format matching 79-byte structs for ZeroMQ/MetaTrader 5 EA integration.
+The Node.js SDK provides a highly concurrent client to connect to the TickEngine stream and decode binary MessagePack WebSocket packets. It also includes the `packMqlSignal` binary buffer utility to format matching 79-byte structs for raw TCP/MetaTrader 5 EA integration.
 
 ---
 
@@ -32,21 +32,38 @@ Provide a `symbols.json` in the client directory to map exchange symbol names to
 ---
 
 ## 💻 Step 3: Example Integration Code
-Here is a complete, copy-pasteable example of how to connect to the stream and broadcast raw binary 79-byte structs to your MetaTrader 5 EA over ZeroMQ:
+Here is a complete, copy-pasteable example of how to connect to the stream and broadcast raw binary 79-byte structs to your MetaTrader 5 EA over raw TCP sockets:
 
 ```typescript
 import { TickEngineClient, packMqlSignal } from "./index";
 import * as fs from "fs";
-import * as zmq from "zeromq"; // requires npm install zeromq
+import * as net from "net";
 
 async function run() {
     const symbolMap = JSON.parse(fs.readFileSync("symbols.json", "utf8"));
     const client = new TickEngineClient("https://tickengine.com/stream", "YOUR_API_KEY", "YOUR_ACCOUNT_ID");
 
-    // Initialize ZeroMQ PUB socket
-    const pubSocket = new zmq.Publisher();
-    await pubSocket.bind("tcp://*:5555");
-    console.log("ZeroMQ PUB socket bound to tcp://*:5555");
+    // Track active EA socket connections
+    const clients: Set<net.Socket> = new Set();
+
+    // Start TCP Socket Server
+    const server = net.createServer((socket) => {
+        console.log(`New MT5 EA connected: ${socket.remoteAddress}:${socket.remotePort}`);
+        clients.add(socket);
+
+        socket.on("error", (err) => {
+            console.warn(`Socket error: ${err.message}`);
+        });
+
+        socket.on("close", () => {
+            clients.delete(socket);
+            console.log(`MT5 EA disconnected`);
+        });
+    });
+
+    server.listen(5555, "0.0.0.0", () => {
+        console.log("TCP server listening on 0.0.0.0:5555");
+    });
 
     client.onEvent(async (event) => {
         if (event.type === "alert") {
@@ -58,28 +75,42 @@ async function run() {
             const timestamp = data.timestamp || Date.now();
             const signalId = data.id || "00000000-0000-0000-0000-000000000000";
 
+            // Resolve mapped symbol name
+            const resolvedSymbol = symbolMap[symbol] || symbol;
+
             // 1. Pack 79-byte raw C-struct matching MqlTradeSignal
             const payload = packMqlSignal(
                 0x5449434B, // Magic 'TICK'
                 2,          // EventType: Alert
                 0,          // OrderType: Market
-                symbol,
+                resolvedSymbol,
                 side,
                 size,
                 price,
                 timestamp,
-                signalId,
-                symbolMap
+                signalId
             );
 
-            // 2. Resolve mapped symbol name for the ZeroMQ topic
-            const resolvedSymbol = symbolMap[symbol] || symbol;
-            const topic = `alert.${resolvedSymbol}`;
+            console.log(`Broadcasting binary signal: ${resolvedSymbol} (${payload.length} bytes) to ${clients.size} connected EAs`);
 
-            console.log(`Broadcasting binary signal: ${topic} (${payload.length} bytes)`);
-
-            // 3. Publish multi-part message (Topic + Binary Struct)
-            await pubSocket.send([topic, payload]);
+            // 2. Broadcast raw payload to all connected MT5 EAs
+            const dead: net.Socket[] = [];
+            for (const socket of clients) {
+                if (!socket.writable) {
+                    dead.push(socket);
+                    continue;
+                }
+                try {
+                    socket.write(payload);
+                } catch (err) {
+                    console.warn(`Write error, dropping client: ${err}`);
+                    dead.push(socket);
+                }
+            }
+            for (const s of dead) {
+                clients.delete(s);
+                s.destroy();
+            }
         }
     });
 }
