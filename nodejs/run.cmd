@@ -12,6 +12,10 @@ if errorlevel 1 goto no_node
 
 echo.
 echo Running Node.js SDK (tickbridge.ts)...
+if not exist config.json if exist ..\config.json (
+    echo Using shared configuration file from parent directory: ..\config.json
+    set TICKENGINE_CONFIG_FILE=..\config.json
+)
 npx ts-node tickbridge.ts
 if errorlevel 1 goto failed
 goto end

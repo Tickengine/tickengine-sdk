@@ -8,7 +8,7 @@ where node >nul 2>nul
 if errorlevel 1 goto needs_node
 
 :: Check if node_modules dependencies are already installed
-if exist node_modules\ws if exist node_modules\@msgpack\msgpack if exist node_modules\ts-node goto all_installed
+if exist node_modules\ws if exist node_modules\@msgpack\msgpack if exist node_modules\ts-node if exist node_modules\@types\node goto all_installed
 
 echo Node.js is installed but dependencies are missing.
 goto install_deps
@@ -34,8 +34,8 @@ exit /b 1
 
 :install_deps
 echo Installing dependencies...
-npm install ws @msgpack/msgpack
-npm install --save-dev @types/ws typescript ts-node
+call npm install ws @msgpack/msgpack
+call npm install --save-dev @types/ws @types/node typescript ts-node
 echo.
 echo Dependencies installed successfully!
 pause

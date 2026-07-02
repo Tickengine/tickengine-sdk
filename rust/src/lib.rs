@@ -68,21 +68,6 @@ pub struct TradeExecutedEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AccountMetricEvent {
-    pub account_id: Uuid,
-    pub entity_type: EntityType,
-    pub timestamp: i64,
-    pub balance: Decimal,
-    pub equity: Decimal,
-    pub min_equity: Decimal,
-    pub max_equity: Decimal,
-    pub drawdown: Decimal,
-    pub drawdown_pct: Decimal,
-    pub unrealized_pnl: Decimal,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct OrderEvent {
     pub order_id: Uuid,
     pub account_id: Uuid,
@@ -102,7 +87,6 @@ pub struct OrderEvent {
 #[serde(tag = "type", content = "data", rename_all = "lowercase")]
 pub enum ClientEvent {
     Trade(TradeExecutedEvent),
-    Metric(AccountMetricEvent),
     Order(OrderEvent),
     Alert(serde_json::Value),
 }
@@ -111,7 +95,7 @@ pub enum ClientEvent {
 #[derive(Debug, Clone, Copy)]
 pub struct MqlTradeSignal {
     pub magic: u32,          // Magic integrity check (0x5449434B / 'TICK')
-    pub event_type: u8,      // 0=Trade, 1=Order, 2=Alert, 3=Metric
+    pub event_type: u8,      // 0=Trade, 1=Order, 2=Alert
     pub order_type: u8,      // 0=Market, 1=Limit, 2=Stop
     pub side: u8,            // 0=Buy, 1=Sell
     pub symbol: [u8; 32],    // Symbol name (null-padded, fixed size)

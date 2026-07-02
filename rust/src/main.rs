@@ -20,7 +20,7 @@ fn extract_order_details(event: &ClientEvent) -> Option<MappedOrder> {
             let order_type = match e.type_ {
                 OrderType::Market => "MARKET".to_string(),
                 OrderType::Limit => "LIMIT".to_string(),
-                OrderType::Stop => "LIMIT".to_string(),
+                OrderType::Stop => "STOP".to_string(),
             };
             Some(MappedOrder {
                 symbol: e.symbol.clone(),
@@ -40,7 +40,7 @@ fn extract_order_details(event: &ClientEvent) -> Option<MappedOrder> {
             let order_type = match e.order_type {
                 OrderType::Market => "MARKET".to_string(),
                 OrderType::Limit => "LIMIT".to_string(),
-                OrderType::Stop => "LIMIT".to_string(),
+                OrderType::Stop => "STOP".to_string(),
             };
             Some(MappedOrder {
                 symbol: e.symbol.clone(),
@@ -77,15 +77,6 @@ fn extract_order_details(event: &ClientEvent) -> Option<MappedOrder> {
                 timestamp: v["timestamp"].as_i64().unwrap_or(0),
             })
         }
-        ClientEvent::Metric(e) => Some(MappedOrder {
-            symbol: e.account_id.to_string(),
-            side: "BUY".to_string(),
-            order_type: "MARKET".to_string(),
-            quantity: e.equity.to_f64().unwrap_or(0.0),
-            price: e.balance.to_f64(),
-            signal_id: e.account_id,
-            timestamp: e.timestamp,
-        }),
     }
 }
 

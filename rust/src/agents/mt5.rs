@@ -135,7 +135,6 @@ fn map_event_to_mql(
         ClientEvent::Trade(_) => 0,
         ClientEvent::Order(_) => 1,
         ClientEvent::Alert(_) => 2,
-        ClientEvent::Metric(_) => 3,
     };
 
     let order_type = match event {
@@ -155,7 +154,6 @@ fn map_event_to_mql(
             Some("stop") | Some("Stop") => 2,
             _ => 0,
         },
-        ClientEvent::Metric(_) => 0,
     };
 
     let side = match event {
@@ -172,7 +170,6 @@ fn map_event_to_mql(
             Some("sell") | Some("Sell") => 1,
             _ => 0,
         },
-        ClientEvent::Metric(_) => 0,
     };
 
     tickengine_sdk::MqlTradeSignal {
