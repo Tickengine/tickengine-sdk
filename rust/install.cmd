@@ -7,21 +7,22 @@ echo ===================================================
 where cargo >nul 2>nul
 if errorlevel 1 goto needs_rust
 
-:: Check if C++ Build Tools are already installed
-set VSWHERE="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-if exist %VSWHERE% (
-    %VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 >nul 2>nul
-    if not errorlevel 1 goto all_installed
-)
-if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" goto all_installed
-if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC" goto all_installed
-if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC" goto all_installed
-if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" goto all_installed
+:: Check if C++ Build Tools and Windows SDK are already installed
+set HAS_MSVC=0
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC" set HAS_MSVC=1
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC" set HAS_MSVC=1
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Professional\VC\Tools\MSVC" set HAS_MSVC=1
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\Enterprise\VC\Tools\MSVC" set HAS_MSVC=1
 
-goto needs_cpp
+set HAS_SDK=0
+if exist "%ProgramFiles(x86)%\Windows Kits\10\Lib" set HAS_SDK=1
+
+if %HAS_MSVC% equ 0 goto needs_cpp
+if %HAS_SDK% equ 0 goto needs_cpp
+goto all_installed
 
 :all_installed
-echo All dependencies (Rust and C++ Build Tools) are already installed.
+echo All dependencies (Rust, C++ Build Tools, and Windows SDK) are already installed.
 exit /b 0
 
 :needs_rust
@@ -41,7 +42,7 @@ pause
 exit /b 1
 
 :needs_cpp
-echo Installing Visual Studio Build Tools (C++ Workload)...
+echo Installing/Updating Visual Studio Build Tools with C++ workload and Windows SDK...
 winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --accept-package-agreements --accept-source-agreements --override "--passive --locale en-US --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 if not errorlevel 1 goto cpp_install_done
 
@@ -60,6 +61,6 @@ exit /b 1
 
 :cpp_install_done
 echo.
-echo C++ Build Tools installed successfully. Please restart your terminal/PC to apply PATH changes.
+echo C++ Build Tools/Windows SDK installed successfully. Please restart your terminal/PC to apply PATH changes.
 pause
 exit /b 0
