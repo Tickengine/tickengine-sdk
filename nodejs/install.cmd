@@ -5,9 +5,14 @@ echo ===================================================
 
 :: Check if node is already installed
 where node >nul 2>nul
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
     echo Node.js not found. Installing Node.js LTS...
-    winget install --id OpenJS.NodeJS --silent --show-progress --accept-package-agreements --accept-source-agreements
+    winget install --id OpenJS.NodeJS --silent --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 (
+        echo Failed to install Node.js via winget.
+        pause
+        exit /b 1
+    )
     echo.
     echo Node.js has been installed. Please restart your terminal and run this script again to install dependencies.
     pause
