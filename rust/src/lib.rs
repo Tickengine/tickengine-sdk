@@ -14,12 +14,12 @@ pub enum OrderSide {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OrderStatus {
-    Pending,
-    Filled,
-    Canceled,
+    Open,
+    Closed,
+    Cancelled,
     Rejected,
-    Expired,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
