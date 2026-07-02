@@ -5,9 +5,14 @@ echo ===================================================
 
 :: Check if python is already installed
 where python >nul 2>nul
-if %ERRORLEVEL% neq 0 (
+if errorlevel 1 (
     echo Python not found. Installing Python...
-    winget install --id Python.Python.3 --silent --show-progress --accept-package-agreements --accept-source-agreements
+    winget install --id Python.Python.3 --silent --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 (
+        echo Failed to install Python via winget.
+        pause
+        exit /b 1
+    )
     echo.
     echo Python has been installed. Please restart your terminal and run this script again to install dependencies.
     pause
