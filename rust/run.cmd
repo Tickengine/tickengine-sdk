@@ -6,7 +6,22 @@ echo ===================================================
 call install.cmd
 if errorlevel 1 goto failed
 
-:: Check if cargo is in PATH (in case it was just installed and PATH wasn't reloaded)
+:: Find Visual Studio Installation Path and Activate Developer Environment
+set VS_DIR=
+set VSWHERE="%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist %VSWHERE% goto vsdevcmd_done
+
+for /f "usebackq tokens=*" %%i in (`%VSWHERE% -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set VS_DIR=%%i
+
+if "%VS_DIR%"=="" goto vsdevcmd_done
+if not exist "%VS_DIR%\Common7\Tools\VsDevCmd.bat" goto vsdevcmd_done
+
+echo Activating Visual Studio Developer Environment...
+call "%VS_DIR%\Common7\Tools\VsDevCmd.bat" -arch=amd64
+
+:vsdevcmd_done
+
+:: Check if cargo is in PATH
 where cargo >nul 2>nul
 if errorlevel 1 goto no_cargo
 
