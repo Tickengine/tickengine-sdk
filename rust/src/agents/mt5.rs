@@ -45,23 +45,20 @@ impl Mt5Agent {
                         );
                         let mut rx = tx_clone.subscribe();
                         tokio::spawn(async move {
-                            let (_, mut writer) =
-                                tokio::io::split(stream);
+                            let (_, mut writer) = tokio::io::split(stream);
                             loop {
                                 match rx.recv().await {
                                     Ok(payload) => {
-                                        if let Err(e) =
-                                            writer.write_all(&payload).await
-                                        {
-                                            warn!("MT5 TCP write error (peer {}): {}. Dropping connection.", peer, e);
+                                        if let Err(e) = writer.write_all(&payload).await {
+                                            warn!(
+                                                "MT5 TCP write error (peer {}): {}. Dropping connection.",
+                                                peer, e
+                                            );
                                             break;
                                         }
                                     }
                                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                                        warn!(
-                                            "MT5 TCP client {} lagged by {} messages",
-                                            peer, n
-                                        );
+                                        warn!("MT5 TCP client {} lagged by {} messages", peer, n);
                                     }
                                     Err(broadcast::error::RecvError::Closed) => {
                                         break;
