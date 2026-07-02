@@ -23,17 +23,20 @@ if not errorlevel 1 (
 :: Install Build Tools if needed
 echo Installing Visual Studio Build Tools (C++ Workload)...
 winget install --id Microsoft.VisualStudio.2022.BuildTools --silent --accept-package-agreements --accept-source-agreements --override "--passive --locale en-US --add Microsoft.VisualStudio.Workload.VCTools"
-if errorlevel 1 (
-    echo Winget install failed. Trying standalone installer...
-    curl -sLO https://aka.ms/vs/17/release/vs_buildtools.exe
-    if not errorlevel 1 (
-        vs_buildtools.exe --quiet --wait --norestart --nocache --installPath "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
-        del vs_buildtools.exe
-    ) else (
-        echo Failed to download Visual Studio Build Tools.
-    )
-)
+if not errorlevel 1 goto install_done
 
+echo Winget install failed. Trying standalone installer...
+curl -sLO https://aka.ms/vs/17/release/vs_buildtools.exe
+if errorlevel 1 goto download_failed
+
+vs_buildtools.exe --quiet --wait --norestart --nocache --installPath "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended
+del vs_buildtools.exe
+goto install_done
+
+:download_failed
+echo Failed to download Visual Studio Build Tools.
+
+:install_done
 echo.
 echo Installation completed. Please restart your terminal/PC to apply PATH changes.
 pause
